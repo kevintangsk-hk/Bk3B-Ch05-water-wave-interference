@@ -1,0 +1,534 @@
+<!DOCTYPE html><html lang="en"><head><meta name="x-poe-datastore-behavior" content="local_only"><meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://code.jquery.com https://unpkg.com https://d3js.org https://threejs.org https://cdn.plot.ly https://stackpath.bootstrapcdn.com https://maps.googleapis.com https://cdn.tailwindcss.com https://ajax.googleapis.com https://kit.fontawesome.com https://cdn.datatables.net https://maxcdn.bootstrapcdn.com https://code.highcharts.com https://tako-static-assets-production.s3.amazonaws.com https://www.youtube.com https://fonts.googleapis.com https://fonts.gstatic.com https://pfst.cf2.poecdn.net https://puc.poecdn.net https://i.imgur.com https://wikimedia.org https://*.icons8.com https://*.giphy.com https://picsum.photos https://images.unsplash.com; frame-src 'self' https://www.youtube.com https://trytako.com; child-src 'self'; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests; block-all-mixed-content;">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wave Interference Simulation</title>
+    
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load React and ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin=""></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin=""></script>
+    
+    <!-- Load Babel to compile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Load MathJax for LaTeX math rendering -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)']] }
+      };
+    </script>
+    <script id="MathJax-script" async="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- Icon Components ---
+        const IconPlay = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+        const IconPause = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+        const IconReset = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>;
+        const IconInfo = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
+        const IconEye = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>;
+        const IconEyeOff = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>;
+        const IconTarget = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
+        const IconMagnet = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11V7a8 8 0 0 1 16 0v4"></path><path d="M4 11h3v4H4z"></path><path d="M17 11h3v4h-3z"></path></svg>;
+
+        const WaveInterferenceSimulation = () => {
+            const [separation, setSeparation] = useState(3);
+            const [wavelength, setWavelength] = useState(20);
+            const [speed, setSpeed] = useState(1);
+            const [isPlaying, setIsPlaying] = useState(true);
+            const [isAntiphase, setIsAntiphase] = useState(false);
+            const [isMagnetic, setIsMagnetic] = useState(true);
+            
+            const [showNodalLines, setShowNodalLines] = useState(false);
+            const [showAntinodalLines, setShowAntinodalLines] = useState(false);
+            
+            const [showFormulas, setShowFormulas] = useState(true);
+            const [challengeMode, setChallengeMode] = useState(false);
+            const [showAnswer, setShowAnswer] = useState(false);
+
+            const canvasRef = useRef(null);
+            const requestRef = useRef();
+            const timeRef = useRef(0);
+            
+            const canvasSize = 300;
+            const displaySize = 500;
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+
+            const [pointP, setPointP] = useState({ x: canvasSize * 0.7, y: canvasSize * 0.3 });
+            const [isDragging, setIsDragging] = useState(false);
+
+            const s1 = { x: centerX - (separation * wavelength) / 2, y: centerY };
+            const s2 = { x: centerX + (separation * wavelength) / 2, y: centerY };
+            
+            const dist1 = Math.sqrt(Math.pow(pointP.x - s1.x, 2) + Math.pow(pointP.y - s1.y, 2));
+            const dist2 = Math.sqrt(Math.pow(pointP.x - s2.x, 2) + Math.pow(pointP.y - s2.y, 2));
+            const pathDiff = Math.abs(dist2 - dist1);
+            const ratio = pathDiff / wavelength;
+
+            const getInterferenceType = (r, antiphase) => {
+                const nearestInteger = Math.round(r);
+                const nearestHalf = Math.floor(r) + 0.5;
+                
+                const isIntegerMatch = Math.abs(r - nearestInteger) < 0.05;
+                const isHalfMatch = Math.abs(r - nearestHalf) < 0.05;
+
+                if (antiphase) {
+                    if (isHalfMatch) return 'Constructive';
+                    if (isIntegerMatch) return 'Destructive';
+                } else {
+                    if (isIntegerMatch) return 'Constructive';
+                    if (isHalfMatch) return 'Destructive';
+                }
+                return 'Partial';
+            };
+
+            const interferenceType = getInterferenceType(ratio, isAntiphase);
+
+            useEffect(() => {
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise();
+                }
+            }, [showFormulas, isAntiphase]);
+
+            const drawHyperbola = useCallback((ctx, delta, color, dash) => {
+                const c = (separation * wavelength) / 2;
+                const a = delta / 2;
+
+                if (a > c) return;
+
+                ctx.strokeStyle = color;
+                ctx.setLineDash(dash);
+                ctx.lineWidth = 3.5;
+
+                if (a === 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, 0);
+                    ctx.lineTo(centerX, canvasSize);
+                    ctx.stroke();
+                    return;
+                }
+
+                const b = Math.sqrt(c * c - a * a);
+                const maxT = 3;
+                const step = 0.05;
+
+                ctx.beginPath();
+                for (let t = -maxT; t <= maxT; t += step) {
+                    const x = centerX + a * Math.cosh(t);
+                    const y = centerY + b * Math.sinh(t);
+                    if (t === -maxT) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                ctx.beginPath();
+                for (let t = -maxT; t <= maxT; t += step) {
+                    const x = centerX - a * Math.cosh(t);
+                    const y = centerY + b * Math.sinh(t);
+                    if (t === -maxT) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }, [centerX, centerY, separation, wavelength, canvasSize]);
+
+            const renderFrame = useCallback(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+
+                if (isPlaying) {
+                    timeRef.current += 0.05 * speed;
+                }
+                const t = timeRef.current;
+                const k = (2 * Math.PI) / wavelength;
+                const phaseOffset = isAntiphase ? Math.PI : 0;
+
+                const imageData = ctx.createImageData(width, height);
+                const data = imageData.data;
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const dx1 = x - s1.x;
+                        const dy1 = y - s1.y;
+                        const d1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+
+                        const dx2 = x - s2.x;
+                        const dy2 = y - s2.y;
+                        const d2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+                        const amp1 = d1 === 0 ? 0 : Math.sin(k * d1 - t) * (20 / Math.sqrt(d1));
+                        const amp2 = d2 === 0 ? 0 : Math.sin(k * d2 - t + phaseOffset) * (20 / Math.sqrt(d2));
+                        
+                        let totalAmp = amp1 + amp2;
+                        
+                        let intensity = 128 + totalAmp * 25;
+                        intensity = Math.max(0, Math.min(255, intensity));
+                        
+                        const r = Math.min(255, intensity * 0.4);
+                        const g = Math.min(255, intensity * 0.7 + 20);
+                        const b = Math.min(255, intensity + 60);
+                        
+                        const index = (y * width + x) * 4;
+                        data[index] = r;
+                        data[index + 1] = g;
+                        data[index + 2] = b;
+                        data[index + 3] = 255;
+                    }
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+
+                if (showAntinodalLines) {
+                    for (let m = 0; m <= Math.ceil(separation); m++) {
+                        const delta = isAntiphase ? (m + 0.5) * wavelength : m * wavelength;
+                        drawHyperbola(ctx, delta, 'rgba(34, 197, 94, 0.9)', []); // Solid line for antinodal
+                    }
+                }
+
+                if (showNodalLines) {
+                    for (let m = 0; m <= Math.ceil(separation); m++) {
+                        const delta = isAntiphase ? m * wavelength : (m + 0.5) * wavelength;
+                        drawHyperbola(ctx, delta, 'rgba(239, 68, 68, 0.9)', [8, 6]); // Broken line for nodal
+                    }
+                }
+
+                ctx.fillStyle = '#f97316';
+                ctx.beginPath(); ctx.arc(s1.x, s1.y, 5, 0, 2 * Math.PI); ctx.fill();
+                ctx.beginPath(); ctx.arc(s2.x, s2.y, 5, 0, 2 * Math.PI); ctx.fill();
+                
+                ctx.setLineDash([]); 
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(pointP.x, pointP.y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(s2.x, s2.y); ctx.lineTo(pointP.x, pointP.y); ctx.stroke();
+
+                ctx.fillStyle = '#facc15';
+                ctx.beginPath(); ctx.arc(pointP.x, pointP.y, 5, 0, 2 * Math.PI); ctx.fill();
+                
+                // Changed text color to white
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '14px sans-serif';
+                ctx.fillText('P', pointP.x + 8, pointP.y - 8);
+
+                requestRef.current = requestAnimationFrame(renderFrame);
+            }, [isPlaying, wavelength, separation, pointP, showNodalLines, showAntinodalLines, speed, isAntiphase, s1.x, s1.y, s2.x, s2.y, drawHyperbola]);
+
+            useEffect(() => {
+                requestRef.current = requestAnimationFrame(renderFrame);
+                return () => cancelAnimationFrame(requestRef.current);
+            }, [renderFrame]);
+
+            const handlePointerDown = (e) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const scaleX = canvasSize / rect.width;
+                const scaleY = canvasSize / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+                
+                if (Math.sqrt(Math.pow(x - pointP.x, 2) + Math.pow(y - pointP.y, 2)) < 30) {
+                    setIsDragging(true);
+                    if (challengeMode) setShowAnswer(false);
+                }
+            };
+
+            const handlePointerMove = (e) => {
+                if (!isDragging) return;
+                const rect = canvasRef.current.getBoundingClientRect();
+                const scaleX = canvasSize / rect.width;
+                const scaleY = canvasSize / rect.height;
+                
+                let rawX = (e.clientX - rect.left) * scaleX;
+                let rawY = (e.clientY - rect.top) * scaleY;
+                
+                rawX = Math.max(0, Math.min(canvasSize, rawX));
+                rawY = Math.max(0, Math.min(canvasSize, rawY));
+
+                // Magnetic Snapping Logic
+                if (isMagnetic) {
+                    const d1 = Math.sqrt(Math.pow(rawX - s1.x, 2) + Math.pow(rawY - s1.y, 2));
+                    const d2 = Math.sqrt(Math.pow(rawX - s2.x, 2) + Math.pow(rawY - s2.y, 2));
+                    const currentPathDiff = Math.abs(d2 - d1);
+                    const currentRatio = currentPathDiff / wavelength;
+                    
+                    // Find nearest multiple of 0.5 (nodal or antinodal line)
+                    const targetRatio = Math.round(currentRatio * 2) / 2;
+                    const targetDelta = targetRatio * wavelength;
+                    
+                    const c = (separation * wavelength) / 2;
+                    const a = targetDelta / 2;
+                    
+                    // If target is valid (a < c), calculate the exact point on the hyperbola
+                    if (a < c) {
+                        const b = Math.sqrt(c * c - a * a);
+                        const dy = rawY - centerY;
+                        
+                        // Hyperbola equation: x^2/a^2 - y^2/b^2 = 1 => x = a * sqrt(1 + y^2/b^2)
+                        let dx = 0;
+                        if (a !== 0) {
+                            dx = a * Math.sqrt(1 + (dy * dy) / (b * b));
+                        }
+                        
+                        // Determine which branch of the hyperbola to snap to
+                        const snapX = d1 < d2 ? centerX - dx : centerX + dx;
+                        
+                        // If within snapping distance (20 pixels), snap it
+                        if (Math.abs(rawX - snapX) < 20) {
+                            rawX = snapX;
+                        }
+                    }
+                }
+
+                setPointP({ x: rawX, y: rawY });
+            };
+
+            const handlePointerUp = () => setIsDragging(false);
+
+            return (
+                <div className="min-h-screen p-4 font-sans text-slate-800">
+                    <div className="max-w-6xl mx-auto space-y-6">
+                        <header className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h1 className="text-2xl font-bold text-blue-900">Wave Interference Simulation</h1>
+                                <p className="text-slate-500">Explore constructive and destructive interference from two coherent sources.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <button onClick={() => setIsMagnetic(!isMagnetic)} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${isMagnetic ? 'bg-amber-100 text-amber-700 border border-amber-300' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>
+                                    <IconMagnet /> {isMagnetic ? 'Magnet On' : 'Magnet Off'}
+                                </button>
+                                <button onClick={() => setShowFormulas(!showFormulas)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition border border-blue-100">
+                                    <IconInfo /> Formulas
+                                </button>
+                                <button onClick={() => { setChallengeMode(!challengeMode); setShowAnswer(false); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition border ${challengeMode ? 'bg-purple-600 text-white border-purple-700' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>
+                                    <IconTarget /> Challenge Mode
+                                </button>
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-2 space-y-4">
+                                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center">
+                                    <div 
+                                        className="relative cursor-crosshair touch-none rounded-lg overflow-hidden border border-slate-300 shadow-inner"
+                                        style={{ width: '100%', maxWidth: displaySize, aspectRatio: '1/1' }}
+                                        onPointerDown={handlePointerDown}
+                                        onPointerMove={handlePointerMove}
+                                        onPointerUp={handlePointerUp}
+                                        onPointerLeave={handlePointerUp}
+                                    >
+                                        <canvas 
+                                            ref={canvasRef} 
+                                            width={canvasSize} 
+                                            height={canvasSize}
+                                            className="w-full h-full"
+                                        />
+                                    </div>
+                                    
+                                    <div className="flex flex-wrap items-center justify-center gap-4 mt-6 w-full">
+                                        <button onClick={() => setIsPlaying(!isPlaying)} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition shadow-md" title={isPlaying ? "Pause" : "Play"}>
+                                            {isPlaying ? <IconPause /> : <IconPlay />}
+                                        </button>
+                                        <button onClick={() => { timeRef.current = 0; setPointP({ x: canvasSize * 0.7, y: canvasSize * 0.3 }); }} className="p-3 bg-slate-200 text-slate-700 rounded-full hover:bg-slate-300 transition shadow-sm" title="Reset">
+                                            <IconReset />
+                                        </button>
+                                        
+                                        <div className="h-8 w-px bg-slate-300 mx-2"></div>
+                                        
+                                        <button 
+                                            onClick={() => setShowAntinodalLines(!showAntinodalLines)} 
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition border ${showAntinodalLines ? 'bg-green-100 border-green-300 text-green-800' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                                        >
+                                            {showAntinodalLines ? <IconEye /> : <IconEyeOff />} 
+                                            <span className="hidden sm:inline">Antinodal (Constructive)</span>
+                                            <span className="sm:hidden">Antinodal</span>
+                                        </button>
+
+                                        <button 
+                                            onClick={() => setShowNodalLines(!showNodalLines)} 
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition border ${showNodalLines ? 'bg-red-100 border-red-300 text-red-800' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                                        >
+                                            {showNodalLines ? <IconEye /> : <IconEyeOff />} 
+                                            <span className="hidden sm:inline">Nodal (Destructive)</span>
+                                            <span className="sm:hidden">Nodal</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <span className="text-yellow-500"><IconTarget /></span> Observation Point P
+                                    </h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <span className="text-slate-500 block mb-1">Distance s₁</span>
+                                            <span className="font-mono font-medium">{dist1.toFixed(1)} cm</span>
+                                        </div>
+                                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <span className="text-slate-500 block mb-1">Distance s₂</span>
+                                            <span className="font-mono font-medium">{dist2.toFixed(1)} cm</span>
+                                        </div>
+                                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <span className="text-slate-500 block mb-1">Path Diff Δ</span>
+                                            <span className="font-mono font-medium text-blue-600">{pathDiff.toFixed(1)} cm</span>
+                                        </div>
+                                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <span className="text-slate-500 block mb-1">Ratio Δ / λ</span>
+                                            <span className="font-mono font-medium text-purple-600">{ratio.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                                        {challengeMode && !showAnswer ? (
+                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                                <span className="text-blue-800 font-medium">What type of interference is happening at P?</span>
+                                                <button onClick={() => setShowAnswer(true)} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition w-full sm:w-auto">
+                                                    Reveal Answer
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <p className="text-blue-900">
+                                                At point P, the path difference ratio is <strong>{ratio.toFixed(2)}</strong>. 
+                                                {isAntiphase && <span className="block mt-1 text-sm text-blue-700">Because the sources are <strong>antiphase</strong>, the conditions are swapped!</span>}
+                                                Therefore, the waves are undergoing <strong className="text-lg underline decoration-2 underline-offset-2">{interferenceType}</strong> interference.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+                                    <h3 className="text-lg font-semibold border-b pb-2">Controls</h3>
+                                    
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-slate-700">Source Phase</span>
+                                        <div className="flex bg-slate-100 rounded-lg p-1">
+                                            <button 
+                                                onClick={() => setIsAntiphase(false)}
+                                                className={`px-3 py-1.5 text-sm rounded-md transition ${!isAntiphase ? 'bg-white shadow-sm text-blue-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
+                                            >
+                                                In-Phase
+                                            </button>
+                                            <button 
+                                                onClick={() => setIsAntiphase(true)}
+                                                className={`px-3 py-1.5 text-sm rounded-md transition ${isAntiphase ? 'bg-white shadow-sm text-blue-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
+                                            >
+                                                Antiphase
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="flex justify-between text-sm font-medium text-slate-700 mb-2">
+                                            <span>Wavelength (λ)</span>
+                                            <span>{wavelength} cm</span>
+                                        </label>
+                                        <input 
+                                            type="range" min="10" max="50" step="1" 
+                                            value={wavelength} onChange={(e) => setWavelength(parseFloat(e.target.value))}
+                                            className="w-full accent-blue-600"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex justify-between text-sm font-medium text-slate-700 mb-2">
+                                            <span>Path Difference (Δ)</span>
+                                            <span className="text-blue-600 font-medium">{pathDiff.toFixed(1)} cm</span>
+                                        </label>
+                                        <input 
+                                            type="range" 
+                                            min="0" 
+                                            max={separation * wavelength} 
+                                            value={pathDiff} 
+                                            disabled 
+                                            className="w-full accent-blue-400 cursor-not-allowed opacity-60"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex justify-between text-sm font-medium text-slate-700 mb-2">
+                                            <span>Source Separation (d)</span>
+                                            <span>{separation.toFixed(1)} λ</span>
+                                        </label>
+                                        <input 
+                                            type="range" min="0.5" max="10" step="0.5" 
+                                            value={separation} onChange={(e) => setSeparation(parseFloat(e.target.value))}
+                                            className="w-full accent-blue-600"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex justify-between text-sm font-medium text-slate-700 mb-2">
+                                            <span>Animation Speed</span>
+                                            <span>{speed.toFixed(1)}x</span>
+                                        </label>
+                                        <input 
+                                            type="range" min="0.1" max="3" step="0.1" 
+                                            value={speed} onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                                            className="w-full accent-blue-600"
+                                        />
+                                    </div>
+                                </div>
+
+                                {showFormulas && (
+                                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4 text-sm">
+                                        <h3 className="text-lg font-semibold border-b pb-2">Physics Principles</h3>
+                                        
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold text-blue-800">Path Difference</h4>
+                                            <p className="text-slate-600">The difference in distance from the two sources to point P:</p>
+                                            <div className="bg-slate-50 p-2 rounded text-center overflow-x-auto">
+                                                \(\Delta = |s_2 - s_1|\)
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold text-green-700">Constructive Interference</h4>
+                                            <p className="text-slate-600">
+                                                {isAntiphase 
+                                                    ? "Because the sources are antiphase, constructive interference happens when the path difference offsets the initial half-wavelength difference." 
+                                                    : "Occurs when waves arrive in phase. The ratio of path difference to wavelength is an integer."}
+                                            </p>
+                                            <div className="bg-green-50 p-2 rounded text-center overflow-x-auto text-green-900 border border-green-100">
+                                                {isAntiphase 
+                                                    ? '\\(\\frac{\\Delta}{\\lambda} = m + \\frac{1}{2} \\quad (m = 0, 1, 2, \\dots)\\)' 
+                                                    : '\\(\\frac{\\Delta}{\\lambda} = m \\quad (m = 0, 1, 2, \\dots)\\)'}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold text-red-700">Destructive Interference</h4>
+                                            <p className="text-slate-600">
+                                                {isAntiphase 
+                                                    ? "Because the sources are antiphase, destructive interference happens when the path difference ratio is an integer (they remain out of phase)." 
+                                                    : "Occurs when waves arrive exactly out of phase. The waves cancel out."}
+                                            </p>
+                                            <div className="bg-red-50 p-2 rounded text-center overflow-x-auto text-red-900 border border-red-100">
+                                                {isAntiphase 
+                                                    ? '\\(\\frac{\\Delta}{\\lambda} = m \\quad (m = 0, 1, 2, \\dots)\\)' 
+                                                    : '\\(\\frac{\\Delta}{\\lambda} = m + \\frac{1}{2} \\quad (m = 0, 1, 2, \\dots)\\)'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<WaveInterferenceSimulation />);
+    </script>
+
+
+</body></html>
